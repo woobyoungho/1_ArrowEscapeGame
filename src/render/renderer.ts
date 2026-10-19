@@ -37,7 +37,26 @@ interface HintAnim {
   duration: number;
 }
 
-type Anim = EscapeAnim | ShakeAnim | HintAnim;
+interface ConfettiPiece {
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  size: number;
+  color: string;
+  spin: number;
+}
+
+interface ConfettiAnim {
+  kind: 'confetti';
+  start: number;
+  duration: number;
+  pieces: ConfettiPiece[];
+}
+
+type Anim = EscapeAnim | ShakeAnim | HintAnim | ConfettiAnim;
+
+const GRAVITY = 900; // px/s²
 
 export class Renderer {
   private ctx: CanvasRenderingContext2D;
@@ -87,6 +106,29 @@ export class Renderer {
     this.anims.push({ kind: 'hint', id, start: now, duration: 1600 });
   }
 
+  /** 클리어 축하: 판 아래쪽 가운데에서 색종이가 터져 오른다 */
+  playConfetti(now: number): number {
+    const w = this.canvas.clientWidth;
+    const h = this.canvas.clientHeight;
+    const palette = Object.values(COLORS).concat('#ffd447');
+    const pieces: ConfettiPiece[] = Array.from({ length: 80 }, (_, i) => {
+      const angle = -Math.PI / 2 + (Math.random() - 0.5) * 1.6;
+      const speed = 450 + Math.random() * 350;
+      return {
+        x: w / 2,
+        y: h * 0.9,
+        vx: Math.cos(angle) * speed,
+        vy: Math.sin(angle) * speed,
+        size: 5 + Math.random() * 6,
+        color: palette[i % palette.length],
+        spin: (Math.random() - 0.5) * 12,
+      };
+    });
+    const duration = 1500;
+    this.anims.push({ kind: 'confetti', start: now, duration, pieces });
+    return duration;
+  }
+
   clearAnims(): void {
     this.anims = [];
   }
@@ -131,6 +173,21 @@ export class Renderer {
       const { dx, dy } = DIR_VEC[a.block.dir];
       const travel = eased * a.distance * cell;
       this.drawBlock(a.block, a.block.x * cell + dx * travel, a.block.y * cell + dy * travel, 1 - t * 0.6, false, -1);
+    }
+
+    for (const a of this.anims) {
+      if (a.kind !== 'confetti') continue;
+      const s = (now - a.start) / 1000;
+      const fade = 1 - (now - a.start) / a.duration;
+      for (const p of a.pieces) {
+        ctx.save();
+        ctx.globalAlpha = Math.max(0, fade);
+        ctx.translate(p.x + p.vx * s, p.y + p.vy * s + 0.5 * GRAVITY * s * s);
+        ctx.rotate(p.spin * s);
+        ctx.fillStyle = p.color;
+        ctx.fillRect(-p.size / 2, -p.size / 4, p.size, p.size / 2);
+        ctx.restore();
+      }
     }
   }
 
