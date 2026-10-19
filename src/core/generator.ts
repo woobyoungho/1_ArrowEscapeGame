@@ -13,6 +13,11 @@ export interface GenOptions {
    * 높을수록 연쇄가 깊어지고, 처음부터 빠질 수 있는 블록이 줄어든다.
    */
   chain?: number;
+  /**
+   * 0~1. 놓을 수 있는 방향 중 경로가 가장 긴 방향(판 안쪽을 향하는 방향)을 고를 확률.
+   * 경로가 길수록 나중에 놓이는 블록에 막히기 쉬워, 처음부터 빠질 수 있는 블록이 줄어든다.
+   */
+  inward?: number;
 }
 
 const key = (c: Cell) => `${c.x},${c.y}`;
@@ -49,18 +54,19 @@ export function generateBoard(opts: GenOptions): Board {
     }
 
     const cell = pool[Math.floor(rand() * pool.length)];
-    let placed = false;
-    for (const dir of shuffle([...DIRS], rand)) {
-      const block: Block = { id: nextId, x: cell.x, y: cell.y, dir };
-      if (canEscape(board, block)) {
-        board.blocks.push(block);
-        occupied.add(key(cell));
-        nextId++;
-        placed = true;
-        break;
-      }
+    const options = shuffle([...DIRS], rand)
+      .map((dir): Block => ({ id: nextId, x: cell.x, y: cell.y, dir }))
+      .filter((b) => canEscape(board, b));
+    if (options.length === 0) {
+      dead.add(key(cell));
+      continue;
     }
-    if (!placed) dead.add(key(cell));
+    const longest = () =>
+      options.reduce((a, b) => (pathCells(board, b).length > pathCells(board, a).length ? b : a));
+    const block = rand() < (opts.inward ?? 0) ? longest() : options[0];
+    board.blocks.push(block);
+    occupied.add(key(cell));
+    nextId++;
   }
   return board;
 }
